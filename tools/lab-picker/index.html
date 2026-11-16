@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>生物課抽籤分組器</title>
+<style>
+  :root {
+    --board: #121512;
+    --panel: #1b201b;
+    --line: #3a423a;
+    --chalk: #f3f1e8;
+    --dim: #a9ad9f;
+    --orange: #ff9a3c;
+    --orange-dark: #d97a1f;
+    --green: #9be28f;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--board);
+    color: var(--chalk);
+    font-family: "Chalkboard SE", "Segoe Print", "Comic Sans MS", "Microsoft JhengHei", "PingFang TC", sans-serif;
+    min-height: 100vh;
+    padding: 20px 16px 48px;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 20px; }
+  h1 {
+    margin: 0;
+    font-size: clamp(1.6rem, 4vw, 2.6rem);
+    letter-spacing: 0.08em;
+    border-bottom: 3px dashed var(--orange);
+    display: inline-block;
+    padding-bottom: 6px;
+  }
+  header p { color: var(--dim); margin: 10px 0 0; }
+
+  .panel {
+    background: var(--panel);
+    border: 2px solid var(--line);
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 18px;
+  }
+  h2 {
+    margin: 0 0 14px;
+    font-size: 1.25rem;
+    color: var(--orange);
+    letter-spacing: 0.05em;
+  }
+  label { color: var(--dim); font-size: 0.95rem; }
+  input[type="number"], input[type="text"] {
+    background: #0c0e0c;
+    color: var(--chalk);
+    border: 2px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font: inherit;
+    font-size: 1.05rem;
+  }
+  input[type="number"] { width: 5.2em; text-align: center; }
+  input:focus-visible, button:focus-visible { outline: 3px solid var(--orange); outline-offset: 2px; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; }
+  .grow { flex: 1 1 220px; }
+  .grow input { width: 100%; }
+  .hint { color: var(--dim); font-size: 0.9rem; margin: 10px 0 0; }
+
+  button {
+    font: inherit;
+    cursor: pointer;
+    border-radius: 10px;
+    border: 2px solid var(--chalk);
+    background: transparent;
+    color: var(--chalk);
+    padding: 9px 18px;
+    font-size: 1.05rem;
+  }
+  button:hover { background: rgba(255,255,255,0.08); }
+  button.primary {
+    background: var(--orange);
+    border-color: var(--orange);
+    color: #1a1206;
+    font-weight: bold;
+  }
+  button.primary:hover { background: var(--orange-dark); border-color: var(--orange-dark); }
+  button.big { font-size: 1.5rem; padding: 14px 40px; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 820px) { .cols { grid-template-columns: 1fr; } }
+  .cols .panel { margin-bottom: 0; }
+
+  /* 抽籤 */
+  .stage { text-align: center; }
+  #drawn {
+    font-size: clamp(6rem, 22vw, 13rem);
+    line-height: 1;
+    font-weight: bold;
+    color: var(--orange);
+    min-height: 1em;
+    margin: 6px 0 4px;
+    text-shadow: 0 0 2px rgba(255,255,255,0.35);
+    font-variant-numeric: tabular-nums;
+  }
+  #drawn.rolling { color: var(--chalk); opacity: 0.75; }
+  #drawn.done { animation: pop 0.35s ease-out; }
+  @keyframes pop { 0% { transform: scale(0.7); } 70% { transform: scale(1.12); } 100% { transform: scale(1); } }
+  #drawMsg { color: var(--dim); min-height: 1.5em; margin: 0 0 14px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 14px; }
+  .chip {
+    border: 2px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 12px;
+    color: var(--dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .chip.latest { border-color: var(--orange); color: var(--orange); }
+
+  /* 計時 */
+  #clock {
+    font-size: clamp(3.6rem, 12vw, 6.5rem);
+    font-weight: bold;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    margin: 6px 0 12px;
+  }
+  #clock.warn { color: var(--orange); }
+  #clock.over { color: #ff6b5e; animation: blink 0.8s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0.25; } }
+  .center { justify-content: center; }
+
+  /* 分組 */
+  #groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .group {
+    border: 2px dashed var(--line);
+    border-radius: 12px;
+    padding: 10px 12px;
+  }
+  .group h3 { margin: 0 0 6px; color: var(--green); font-size: 1.1rem; }
+  .group .seats { font-size: 1.5rem; line-height: 1.5; font-variant-numeric: tabular-nums; word-spacing: 0.25em; }
+  #groupMsg { color: var(--dim); margin: 12px 0 0; min-height: 1.4em; }
+  @media (prefers-reduced-motion: reduce) {
+    #drawn.done, #clock.over { animation: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🧬 生物課抽籤分組器</h1>
+    <p>抽人回答 ・ 實驗分組 ・ 實驗倒數</p>
+  </header>
+
+  <section class="panel" aria-labelledby="h-set">
+    <h2 id="h-set">① 今天的名單</h2>
+    <div class="row">
+      <div><label for="from">座號從</label> <input id="from" type="number" min="1" max="99" value="1"></div>
+      <div><label for="to">到</label> <input id="to" type="number" min="1" max="99" value="32"></div>
+      <div class="grow">
+        <label for="absent">缺席或不參加的座號</label>
+        <input id="absent" type="text" inputmode="numeric" placeholder="例：5, 12, 20（用逗號或空白分開）">
+      </div>
+    </div>
+    <p class="hint" id="rosterInfo"></p>
+  </section>
+
+  <div class="cols">
+    <section class="panel stage" aria-labelledby="h-draw">
+      <h2 id="h-draw">② 抽一位</h2>
+      <div id="drawn" aria-live="polite">?</div>
+      <p id="drawMsg"></p>
+      <div class="row center">
+        <button class="primary big" id="btnDraw">抽籤</button>
+        <button id="btnResetDraw">重新開始</button>
+      </div>
+      <div class="chips" id="history" aria-label="已抽過的座號"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-timer">
+      <h2 id="h-timer">③ 實驗倒數</h2>
+      <div id="clock" role="timer" aria-live="off">05:00</div>
+      <div class="row center">
+        <div><label for="mins">分鐘</label> <input id="mins" type="number" min="0" max="180" value="5"></div>
+        <div><label for="secs">秒</label> <input id="secs" type="number" min="0" max="59" value="0"></div>
+      </div>
+      <div class="row center" style="margin-top:14px">
+        <button class="primary" id="btnStart">開始</button>
+        <button id="btnResetTimer">重設</button>
+      </div>
+      <p class="hint" style="text-align:center">最後 30 秒會變橘色，時間到會閃爍並響三聲。</p>
+    </section>
+  </div>
+
+  <section class="panel" aria-labelledby="h-group" style="margin-top:18px">
+    <h2 id="h-group">④ 實驗分組</h2>
+    <div class="row">
+      <div><label for="size">每組人數</label> <input id="size" type="number" min="2" max="20" value="4"></div>
+      <button class="primary" id="btnGroup">隨機分組</button>
+    </div>
+    <p id="groupMsg"></p>
+    <div id="groups"></div>
+  </section>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var KEY = "lab-picker-settings";
+
+  // ---------- 名單 ----------
+  function clampInt(el, min, max, fallback) {
+    var n = parseInt(el.value, 10);
+    if (isNaN(n)) n = fallback;
+    return Math.min(max, Math.max(min, n));
+  }
+  function parseAbsent() {
+    var set = {};
+    ($("absent").value.match(/\d+/g) || []).forEach(function (s) { set[parseInt(s, 10)] = true; });
+    return set;
+  }
+  function roster() {
+    var a = clampInt($("from"), 1, 99, 1), b = clampInt($("to"), 1, 99, 32);
+    if (a > b) { var t = a; a = b; b = t; }
+    var absent = parseAbsent(), list = [];
+    for (var i = a; i <= b; i++) if (!absent[i]) list.push(i);
+    return list;
+  }
+  function shuffle(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+  function save() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify({
+        from: $("from").value, to: $("to").value, absent: $("absent").value,
+        size: $("size").value, mins: $("mins").value, secs: $("secs").value
+      }));
+    } catch (e) { /* 無法儲存時照常運作 */ }
+  }
+  function load() {
+    try {
+      var s = JSON.parse(localStorage.getItem(KEY) || "null");
+      if (!s) return;
+      ["from", "to", "absent", "size", "mins", "secs"].forEach(function (k) {
+        if (s[k] !== undefined && s[k] !== null) $(k).value = s[k];
+      });
+    } catch (e) { /* 忽略 */ }
+  }
+
+  // ---------- 抽籤 ----------
+  var drawnList = [], rolling = false;
+
+  function remaining() {
+    var used = {};
+    drawnList.forEach(function (n) { used[n] = true; });
+    return roster().filter(function (n) { return !used[n]; });
+  }
+  function renderRoster() {
+    var list = roster(), left = remaining().length;
+    $("rosterInfo").textContent = "今天參加：" + list.length + " 人　｜　還沒被抽到：" + left + " 人";
+    $("btnDraw").disabled = rolling || left === 0;
+    if (!rolling && list.length > 0 && left === 0) {
+      $("drawMsg").textContent = "全部都抽過了，按「重新開始」再來一輪。";
+    }
+  }
+  function renderHistory() {
+    var box = $("history");
+    box.textContent = "";
+    drawnList.forEach(function (n, i) {
+      var c = document.createElement("span");
+      c.className = "chip" + (i === drawnList.length - 1 ? " latest" : "");
+      c.textContent = n;
+      box.appendChild(c);
+    });
+  }
+  function draw() {
+    var pool = remaining();
+    if (rolling || pool.length === 0) return;
+    var pick = pool[Math.floor(Math.random() * pool.length)];
+    var el = $("drawn"), all = roster();
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    rolling = true;
+    $("btnDraw").disabled = true;
+    $("drawMsg").textContent = "";
+    el.className = "rolling";
+    var ticks = reduce ? 0 : 16, i = 0;
+    (function step() {
+      if (i < ticks) {
+        el.textContent = all[Math.floor(Math.random() * all.length)];
+        i++;
+        setTimeout(step, 45 + i * 6);
+        return;
+      }
+      el.textContent = pick;
+      el.className = "done";
+      drawnList.push(pick);
+      rolling = false;
+      $("drawMsg").textContent = "請 " + pick + " 號！";
+      renderHistory();
+      renderRoster();
+    })();
+  }
+  function resetDraw() {
+    if (rolling) return;
+    drawnList = [];
+    $("drawn").textContent = "?";
+    $("drawn").className = "";
+    $("drawMsg").textContent = "";
+    renderHistory();
+    renderRoster();
+  }
+
+  // ---------- 分組 ----------
+  function makeGroups() {
+    var list = shuffle(roster());
+    var size = clampInt($("size"), 2, 20, 4);
+    var box = $("groups");
+    box.textContent = "";
+    if (list.length === 0) { $("groupMsg").textContent = "名單是空的，請先設定座號範圍。"; return; }
+    var count = Math.max(1, Math.round(list.length / size));
+    if (list.length >= size && Math.floor(list.length / size) >= 1) count = Math.ceil(list.length / size);
+    // 餘數不足一半組員時，併入其他組，避免出現一兩人的小組
+    var rest = list.length % size;
+    if (rest !== 0 && rest < Math.ceil(size / 2) && count > 1) count -= 1;
+    var groups = [];
+    for (var g = 0; g < count; g++) groups.push([]);
+    list.forEach(function (n, i) { groups[i % count].push(n); });
+    groups.forEach(function (members, g) {
+      members.sort(function (a, b) { return a - b; });
+      var card = document.createElement("div");
+      card.className = "group";
+      var h = document.createElement("h3");
+      h.textContent = "第 " + (g + 1) + " 組（" + members.length + " 人）";
+      var p = document.createElement("div");
+      p.className = "seats";
+      p.textContent = members.join(" ");
+      card.appendChild(h); card.appendChild(p);
+      box.appendChild(card);
+    });
+    $("groupMsg").textContent = "共 " + list.length + " 人，分成 " + count + " 組。再按一次會重新洗牌。";
+  }
+
+  // ---------- 計時 ----------
+  var total = 300, left = 300, endAt = 0, timerId = null, audioCtx = null;
+
+  function fmt(s) {
+    var m = Math.floor(s / 60), r = s % 60;
+    return (m < 10 ? "0" : "") + m + ":" + (r < 10 ? "0" : "") + r;
+  }
+  function readDuration() {
+    return clampInt($("mins"), 0, 180, 5) * 60 + clampInt($("secs"), 0, 59, 0);
+  }
+  function renderClock() {
+    var c = $("clock");
+    c.textContent = fmt(left);
+    c.className = left === 0 && total > 0 && endAt === -1 ? "over" : (left <= 30 && left > 0 && timerId ? "warn" : "");
+  }
+  function beep() {
+    try {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      audioCtx = audioCtx || new Ctx();
+      [0, 0.45, 0.9].forEach(function (t) {
+        var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.frequency.value = 880;
+        g.gain.setValueAtTime(0.25, audioCtx.currentTime + t);
+        g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + t + 0.3);
+        o.connect(g); g.connect(audioCtx.destination);
+        o.start(audioCtx.currentTime + t); o.stop(audioCtx.currentTime + t + 0.32);
+      });
+    } catch (e) { /* 沒有聲音也沒關係 */ }
+  }
+  function stopTick() { if (timerId) { clearInterval(timerId); timerId = null; } }
+  function tick() {
+    left = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+    if (left === 0) {
+      stopTick();
+      endAt = -1;
+      $("btnStart").textContent = "開始";
+      $("btnStart").disabled = true;
+      beep();
+    }
+    renderClock();
+  }
+  function startPause() {
+    if (timerId) {                       // 暫停
+      stopTick();
+      left = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+      $("btnStart").textContent = "繼續";
+      renderClock();
+      return;
+    }
+    if (left === 0) return;
+    // 先建立音訊，瀏覽器才允許稍後發出聲音
+    try { var Ctx = window.AudioContext || window.webkitAudioContext; if (Ctx) { audioCtx = audioCtx || new Ctx(); audioCtx.resume(); } } catch (e) {}
+    endAt = Date.now() + left * 1000;
+    timerId = setInterval(tick, 200);
+    $("btnStart").textContent = "暫停";
+    renderClock();
+  }
+  function resetTimer() {
+    stopTick();
+    total = left = readDuration();
+    endAt = 0;
+    $("btnStart").textContent = "開始";
+    $("btnStart").disabled = left === 0;
+    renderClock();
+  }
+
+  // ---------- 綁定 ----------
+  load();
+  ["from", "to", "absent"].forEach(function (id) {
+    $(id).addEventListener("input", function () { save(); renderRoster(); });
+  });
+  $("size").addEventListener("input", save);
+  ["mins", "secs"].forEach(function (id) {
+    $(id).addEventListener("input", function () { save(); if (!timerId) resetTimer(); });
+  });
+  $("btnDraw").addEventListener("click", draw);
+  $("btnResetDraw").addEventListener("click", resetDraw);
+  $("btnGroup").addEventListener("click", makeGroups);
+  $("btnStart").addEventListener("click", startPause);
+  $("btnResetTimer").addEventListener("click", resetTimer);
+
+  renderRoster();
+  resetTimer();
+})();
+</script>
+</body>
+</html>
